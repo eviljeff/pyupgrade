@@ -1,11 +1,14 @@
 import argparse
 import ast
 import collections
+import os
 import re
+import scandir
 import string
 import sys
 import tokenize
 from typing import Dict
+from typing import Iterator
 from typing import List
 from typing import Match
 from typing import Optional
@@ -891,9 +894,23 @@ def _fix_file(filename: str, args: argparse.Namespace) -> int:
         return contents_text != contents_text_orig
 
 
+def _walkfiles(folder: str, suffix: str = '') -> Iterator:
+    """Iterator over files in folder, recursively.
+
+    Copied from
+    https://github.com/mozilla/addons-server/blob/c2341669b910f840fd8de1c3039806f321c918e5/src/olympia/amo/utils.py
+    """
+    return (
+        os.path.join(basename, filename)
+        for basename, dirnames, filenames in scandir.walk(folder)
+        for filename in filenames
+        if filename.endswith(suffix)
+    )
+
+
 def main(argv: Optional[Sequence[str]] = None) -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument('filenames', nargs='*')
+    parser.add_argument('targets', nargs='*')
     parser.add_argument('--exit-zero-even-if-changed', action='store_true')
     parser.add_argument('--keep-percent-format', action='store_true')
     parser.add_argument('--keep-mock', action='store_true')
@@ -929,8 +946,12 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     args = parser.parse_args(argv)
 
     ret = 0
-    for filename in args.filenames:
-        ret |= _fix_file(filename, args)
+    for target in args.targets:
+        if os.path.isdir(target):
+            for filename in _walkfiles(target, '.py'):
+                ret |= _fix_file(filename, args)
+        else:
+            ret |= _fix_file(target, args)
     return ret
 
 
